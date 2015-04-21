@@ -30,6 +30,10 @@ package { 'tmux':
     ensure => 'installed',
 }
 
+package { 'nc':
+    ensure => 'installed',
+}
+
 # Control sshd settings and secure its config ############################
 ##########################################################################
 class { 'ssh::server':
@@ -186,10 +190,23 @@ node 'test-web.test' {
         gpgcheck => 1,
         gpgkey => 'http://packages.elasticsearch.org/GPG-KEY-elasticsearch',
     }
+
+    yumrepo { 'logstash':
+        descr => 'logstash repository for 1.4.x packages',
+        baseurl => 'http://packages.elasticsearch.org/logstash/1.4/centos',
+        enabled => 1,
+        gpgcheck => 1,
+        gpgkey => 'http://packages.elasticsearch.org/GPG-KEY-elasticsearch',
+    }
  
     package { 'elasticsearch':
         ensure => 'installed',
         require => Yumrepo['elasticsearch'],
+    }
+
+    package { 'logstash':
+        ensure => 'installed',
+        require => Yumrepo['logstash'],
     }
 
     package { 'daemonize':
@@ -213,6 +230,20 @@ node 'test-web.test' {
         action => 'accept',
     }
 
+    firewall { '200 allow incoming kibana':
+        chain => 'INPUT',
+        state => ['NEW'],
+        proto => 'tcp',
+        dport => '8080',
+        action => 'accept',
+    }
+
+    selboolean { 'httpd_can_network_connect':
+        name => 'httpd_can_network_connect',
+        persistent => true,
+        value => 'on',
+    }
+
     class { 'apache':
         default_mods => false,
         default_confd_files => false,
@@ -221,11 +252,17 @@ node 'test-web.test' {
 
     apache::mod { 'dir': }
 
-    apache::vhost {'testweb':
+    apache::vhost { 'testweb':
         port => 80,
         docroot => '/var/www/html',
         directoryindex => ['index.html index.htm'],
         options => ['None'],
+    }
+
+    apache::vhost { 'kibana':
+        port => 8080,
+        docroot => '/var/www/kibana',
+        proxy_dest => "http://localhost:5601",
     }
    
 }
